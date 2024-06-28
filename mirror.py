@@ -26,14 +26,26 @@ def main():
     if not target_versions and any([
         asset["yanked"] for asset in all_releases[current_version]
     ]):
-        version = all_non_yanked_versions[-1]
-        paths = process_version(version)
+        last_valid_version = all_non_yanked_versions[-1]
+        paths = process_version(last_valid_version)
         if subprocess.check_output(["git", "status", "-s"]).strip():
             subprocess.run(["git", "add", *paths], check=True)
             subprocess.run(
-                ["git", "commit", "-m", f"Mirror: yanked {version}"], check=True
+                ["git", "commit", "-m", f"Mirror: yanked {last_valid_version}"],
+                check=True,
             )
-            subprocess.run(["git", "tag", "--delete", f"{version}"], check=True)
+            subprocess.run(["git", "push", "origin", "HEAD:refs/heads/main"], check=True)
+            subprocess.run(
+                [
+                    "gh",
+                    "release",
+                    "delete",
+                    f"{last_valid_version}",
+                    "--cleanup-tag",
+                    "--yes",
+                ],
+                check=True,
+            )
         return
 
     for version in target_versions:
@@ -41,7 +53,27 @@ def main():
         if subprocess.check_output(["git", "status", "-s"]).strip():
             subprocess.run(["git", "add", *paths], check=True)
             subprocess.run(["git", "commit", "-m", f"Mirror: {version}"], check=True)
+            subprocess.run(["git", "push", "origin", "HEAD:refs/heads/main"], check=True)
             subprocess.run(["git", "tag", f"{version}"], check=True)
+            subprocess.run(
+                ["git", "push", "origin", "HEAD:refs/heads/main", "--tags"], check=True
+            )
+
+            subprocess.run(
+                [
+                    "gh",
+                    "release",
+                    "create",
+                    f"{version}",
+                    "--title",
+                    f"{version}",
+                    "--notes",
+                    f"See: https://github.com/astral-sh/uv/releases/tag/{version}",
+                    "--latest",
+                ],
+                check=True,
+            )
+
         else:
             print(f"No change {version}")
 
